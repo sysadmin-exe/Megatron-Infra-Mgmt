@@ -91,21 +91,20 @@ jobs:
           echo "Created: tenants/${TENANT_NAME}/github"
           
           # Create backend.tf for github directory
-          cat > "tenants/${TENANT_NAME}/github/backend.tf" <<'GHEOF'
-terraform {
-  backend "s3" {
-    bucket         = "github-tf-state-bucket"
-    key            = "${TENANT_NAME}/github/terraform.tfstate"
-    region         = "LOCATION_PLACEHOLDER"
-    encrypt        = true
-    dynamodb_table = "terraform-locks"
-  }
-}
-GHEOF
-          # Replace placeholder with actual location
-          sed -i "s/LOCATION_PLACEHOLDER/${LOCATION}/g" "tenants/${TENANT_NAME}/github/backend.tf"
-          echo "Created: tenants/${TENANT_NAME}/github/backend.tf"
+          cat > "tenants/${TENANT_NAME}/github/backend.tf" <<GHEOF
+          terraform {
+            backend "s3" {
+              bucket         = "github-tf-state-bucket"
+              key            = "${TENANT_NAME}/github/terraform.tfstate"
+              region         = "${LOCATION}"
+              encrypt        = true
+              dynamodb_table = "terraform-locks"
+            }
+          }
+          GHEOF
           
+          echo "Created: tenants/${TENANT_NAME}/github/backend.tf"
+
           # Handle 'all' option or single environment
           if [ "$ENVIRONMENT" = "all" ]; then
             ENV_ARRAY=("dev" "staging" "prod")
@@ -122,92 +121,89 @@ GHEOF
             echo "Created: tenants/${TENANT_NAME}/${LOCATION}/${env}"
             
             # Create backend.tf configuration
-            cat > "tenants/${TENANT_NAME}/${LOCATION}/${env}/backend.tf" <<EOF
-terraform {
-  backend "s3" {
-    bucket         = "${env}-tf-state-bucket"
-    key            = "${TENANT_NAME}/${LOCATION}/${env}/terraform.tfstate"
-    region         = "${LOCATION}"
-    encrypt        = true
-    dynamodb_table = "terraform-locks"
-  }
-}
-EOF
+            cat > "tenants/${TENANT_NAME}/${LOCATION}/${env}/backend.tf" <<BACKEOF
+          terraform {
+            backend "s3" {
+              bucket         = "${env}-tf-state-bucket"
+              key            = "${TENANT_NAME}/${LOCATION}/${env}/terraform.tfstate"
+              region         = "${LOCATION}"
+              encrypt        = true
+              dynamodb_table = "terraform-locks"
+            }
+          }
+          BACKEOF
+            
             echo "Created: tenants/${TENANT_NAME}/${LOCATION}/${env}/backend.tf"
             
             # Create init.tf configuration with conditional providers
-            cat > "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<'INITEOF'
-terraform {
-  required_version = ">= 1.8.0"
+            cat > "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<INITEOF
+          terraform {
+            required_version = ">= 1.8.0"
 
-  required_providers {
-INITEOF
+            required_providers {
+          INITEOF
             
             # Add providers based on input
             IFS=',' read -ra PROVIDER_ARRAY <<< "$PROVIDERS"
             for provider in "${PROVIDER_ARRAY[@]}"; do
-              provider=$(echo "$provider" | xargs)  # Trim whitespace
+              provider=$(echo "$provider" | xargs)
               case "$provider" in
                 aws)
-                  cat >> "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<'INITEOF'
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 6.0"
-    }
-
-INITEOF
+                  cat >> "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<AWSEOF
+              aws = {
+                source  = "hashicorp/aws"
+                version = "~> 6.0"
+              }
+          AWSEOF
                   ;;
                 postgresql|psql)
-                  cat >> "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<'INITEOF'
-    postgresql = {
-      source  = "cyrilgdn/postgresql"
-      version = "~> 1.22"
-    }
-
-INITEOF
+                  cat >> "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<PGEOF
+              postgresql = {
+                source  = "cyrilgdn/postgresql"
+                version = "~> 1.22"
+              }
+          PGEOF
                   ;;
                 helm)
-                  cat >> "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<'INITEOF'
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 3.1"
-    }
-
-INITEOF
+                  cat >> "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<HELMEOF
+              helm = {
+                source  = "hashicorp/helm"
+                version = "~> 3.1"
+              }
+          HELMEOF
                   ;;
                 kubernetes)
-                  cat >> "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<'INITEOF'
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = "~> 3.0"
-    }
-
-INITEOF
+                  cat >> "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<K8SEOF
+              kubernetes = {
+                source  = "hashicorp/kubernetes"
+                version = "~> 3.0"
+              }
+          K8SEOF
                   ;;
               esac
             done
             
             # Close required_providers and terraform blocks
-            cat >> "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<'INITEOF'
-  }
-}
-INITEOF
+            cat >> "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<CLOSEEOF
+            }
+          }
+          CLOSEEOF
             
             # Add AWS provider configuration if aws is selected
             if [[ ",$PROVIDERS," == *",aws,"* ]]; then
-              cat >> "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<INITEOF
+              cat >> "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<PROVEOF
 
-provider "aws" {
-  region = "${LOCATION}"
-  default_tags {
-    tags = {
-      Environment = "${env}"
-      Owner       = "${TENANT_NAME}"
-      Terraform   = "true"
-    }
-  }
-}
-INITEOF
+          provider "aws" {
+            region = "${LOCATION}"
+            default_tags {
+              tags = {
+                Environment = "${env}"
+                Owner       = "${TENANT_NAME}"
+                Terraform   = "true"
+              }
+            }
+          }
+          PROVEOF
             fi
             
             echo "Created: tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf"
