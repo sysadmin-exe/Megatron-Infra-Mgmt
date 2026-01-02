@@ -20,7 +20,11 @@ on:
       location:
         description: 'Location for the tenant (not used in directory structure)'
         required: false
-        type: string
+        type: choice
+        options:
+          - eu-central-1
+          - us-east-2
+          - ap-northeast-1
         default: 'eu-central-1'
       provider_aws:
         description: 'Include AWS provider'
