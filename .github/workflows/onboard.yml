@@ -1,0 +1,226 @@
+name: Onboard 
+
+on:
+  workflow_dispatch:
+    inputs:
+      tenant_name:
+        description: 'Name of the tenant (e.g., platform-team)'
+        required: true
+        type: string
+      environments:
+        description: 'Environment to create (or all for all environments)'
+        required: true
+        type: choice
+        options:
+          - all
+          - dev
+          - staging
+          - prod
+        default: 'all'
+      location:
+        description: 'Location for the tenant (not used in directory structure)'
+        required: false
+        type: string
+        default: 'eu-central-1'
+      provider_aws:
+        description: 'Include AWS provider'
+        required: false
+        type: boolean
+        default: true
+      provider_postgresql:
+        description: 'Include PostgreSQL provider'
+        required: false
+        type: boolean
+        default: false
+      provider_helm:
+        description: 'Include Helm provider'
+        required: false
+        type: boolean
+        default: false
+      provider_kubernetes:
+        description: 'Include Kubernetes provider'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  create-directories:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Create directory structure
+        run: |
+          # Set variables from inputs
+          TENANT_NAME="${{ inputs.tenant_name }}"
+          ENVIRONMENT="${{ inputs.environments }}"
+          LOCATION="${{ inputs.location }}"
+          
+          # Build providers list from boolean inputs
+          PROVIDERS=""
+          if [ "${{ inputs.provider_aws }}" = "true" ]; then
+            PROVIDERS="${PROVIDERS},aws"
+          fi
+          if [ "${{ inputs.provider_postgresql }}" = "true" ]; then
+            PROVIDERS="${PROVIDERS},postgresql"
+          fi
+          if [ "${{ inputs.provider_helm }}" = "true" ]; then
+            PROVIDERS="${PROVIDERS},helm"
+          fi
+          if [ "${{ inputs.provider_kubernetes }}" = "true" ]; then
+            PROVIDERS="${PROVIDERS},kubernetes"
+          fi
+          # Remove leading comma
+          PROVIDERS="${PROVIDERS#,}"
+          
+          # Validate tenant name - allow only alphanumeric, hyphens, and underscores
+          if ! [[ "$TENANT_NAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            echo "Error: tenant_name must contain only alphanumeric characters, hyphens, and underscores"
+            exit 1
+          fi
+          
+          echo "Creating directory structure for tenant: $TENANT_NAME"
+          echo "Environment: $ENVIRONMENT"
+          
+          # Create base tenant directory with github subdirectory
+          mkdir -p "tenants/${TENANT_NAME}/github"
+          echo "Created: tenants/${TENANT_NAME}/github"
+          
+          # Create backend.tf for github directory
+          cat > "tenants/${TENANT_NAME}/github/backend.tf" <<EOF
+terraform {
+  backend "s3" {
+    bucket         = "github-tf-state-bucket"
+    key            = "${TENANT_NAME}/${{ inputs.location }}/github/terraform.tfstate"
+    region         = "${{ inputs.location }}"
+    encrypt        = true
+    dynamodb_table = "terraform-locks"
+  }
+}
+EOF
+          echo "Created: tenants/${TENANT_NAME}/github/backend.tf"
+          
+          # Handle 'all' option or single environment
+          if [ "$ENVIRONMENT" = "all" ]; then
+            ENV_ARRAY=("dev" "staging" "prod")
+          else
+            ENV_ARRAY=("$ENVIRONMENT")
+          fi
+          
+          # Create structure for each environment
+          for env in "${ENV_ARRAY[@]}"; do
+            echo "Creating directory for environment: $env"
+            
+            # Create environment directory
+            mkdir -p "tenants/${TENANT_NAME}/${LOCATION}/${env}"
+            echo "Created: tenants/${TENANT_NAME}/${LOCATION}/${env}"
+            
+            # Create backend.tf configuration
+            cat > "tenants/${TENANT_NAME}/${LOCATION}/${env}/backend.tf" <<EOF
+terraform {
+  backend "s3" {
+    bucket         = "${env}-tf-state-bucket"
+    key            = "${TENANT_NAME}/${{ inputs.location }}/${env}/terraform.tfstate"
+    region         = "${{ inputs.location }}"
+    encrypt        = true
+    dynamodb_table = "terraform-locks"
+  }
+}
+EOF
+            echo "Created: tenants/${TENANT_NAME}/${LOCATION}/${env}/backend.tf"
+            
+            # Create init.tf configuration with conditional providers
+            cat > "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<'INITEOF'
+terraform {
+  required_version = ">= 1.8.0"
+
+  required_providers {
+INITEOF
+            
+            # Add providers based on input
+            IFS=',' read -ra PROVIDER_ARRAY <<< "$PROVIDERS"
+            for provider in "${PROVIDER_ARRAY[@]}"; do
+              provider=$(echo "$provider" | xargs)  # Trim whitespace
+              case "$provider" in
+                aws)
+                  cat >> "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<'INITEOF'
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+
+INITEOF
+                  ;;
+                postgresql|psql)
+                  cat >> "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<'INITEOF'
+    postgresql = {
+      source  = "cyrilgdn/postgresql"
+      version = "~> 1.22"
+    }
+
+INITEOF
+                  ;;
+                helm)
+                  cat >> "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<'INITEOF'
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 3.1"
+    }
+
+INITEOF
+                  ;;
+                kubernetes)
+                  cat >> "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<'INITEOF'
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 3.0"
+    }
+
+INITEOF
+                  ;;
+              esac
+            done
+            
+            # Close required_providers and terraform blocks
+            cat >> "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<'INITEOF'
+  }
+}
+INITEOF
+            
+            # Add AWS provider configuration if aws is selected
+            if [[ ",$PROVIDERS," == *",aws,"* ]]; then
+              cat >> "tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf" <<INITEOF
+
+provider "aws" {
+  region = "${LOCATION}"
+  default_tags {
+    tags = {
+      Environment = "${env}"
+      Owner       = "${TENANT_NAME}"
+      Terraform   = "true"
+    }
+  }
+}
+INITEOF
+            fi
+            
+            echo "Created: tenants/${TENANT_NAME}/${LOCATION}/${env}/init.tf"
+          done
+      
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "Megatron[bot]@users.noreply.github.com"
+          git config --local user.name "Megatron[bot]"
+          git add .
+          
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Create directory structure for tenant: ${{ inputs.tenant_name }}"
+            git push
+            echo "Changes committed and pushed successfully"
+          fi
