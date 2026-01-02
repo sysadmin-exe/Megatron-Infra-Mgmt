@@ -95,7 +95,7 @@ jobs:
 terraform {
   backend "s3" {
     bucket         = "github-tf-state-bucket"
-    key            = "${TENANT_NAME}/${{ inputs.location }}/github/terraform.tfstate"
+    key            = "${TENANT_NAME}/github/terraform.tfstate"
     region         = "${{ inputs.location }}"
     encrypt        = true
     dynamodb_table = "terraform-locks"
