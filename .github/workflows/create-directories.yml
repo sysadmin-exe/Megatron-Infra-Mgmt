@@ -36,6 +36,18 @@ jobs:
           ENVIRONMENTS="${{ inputs.environments }}"
           CREATE_SHARED_SERVICES="${{ inputs.create_shared_services }}"
           
+          # Validate tenant name - allow only alphanumeric, hyphens, and underscores
+          if ! [[ "$TENANT_NAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            echo "Error: tenant_name must contain only alphanumeric characters, hyphens, and underscores"
+            exit 1
+          fi
+          
+          # Validate environments - allow only alphanumeric, hyphens, underscores, and commas
+          if ! [[ "$ENVIRONMENTS" =~ ^[a-zA-Z0-9_,-]+$ ]]; then
+            echo "Error: environments must contain only alphanumeric characters, hyphens, underscores, and commas"
+            exit 1
+          fi
+          
           echo "Creating directory structure for tenant: $TENANT_NAME"
           echo "Environments: $ENVIRONMENTS"
           
@@ -48,6 +60,17 @@ jobs:
           for env in "${ENV_ARRAY[@]}"; do
             # Trim whitespace
             env=$(echo "$env" | xargs)
+            
+            # Skip empty environment names
+            if [ -z "$env" ]; then
+              continue
+            fi
+            
+            # Validate environment name
+            if ! [[ "$env" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+              echo "Warning: Skipping invalid environment name: $env"
+              continue
+            fi
             
             echo "Creating directories for environment: $env"
             
@@ -69,8 +92,10 @@ jobs:
           fi
           
           # Create .gitkeep files to ensure directories are tracked by git
-          find tenants -type d -exec touch {}/.gitkeep \;
-          if [ "$CREATE_SHARED_SERVICES" = "true" ]; then
+          if [ -d "tenants" ]; then
+            find tenants -type d -exec touch {}/.gitkeep \;
+          fi
+          if [ "$CREATE_SHARED_SERVICES" = "true" ] && [ -d "shared-services" ]; then
             touch shared-services/.gitkeep
           fi
           
@@ -78,7 +103,15 @@ jobs:
           echo "Directory structure created successfully!"
           echo ""
           echo "Directory tree:"
-          tree -a || find . -type d -not -path "./.git/*" | sort
+          if command -v tree &> /dev/null; then
+            tree -a tenants/ shared-services/ 2>/dev/null || true
+          else
+            echo "tenants/"
+            find tenants -type d 2>/dev/null | sort || true
+            if [ -d "shared-services" ]; then
+              echo "shared-services/"
+            fi
+          fi
       
       - name: Commit and push changes
         run: |
