@@ -91,17 +91,19 @@ jobs:
           echo "Created: tenants/${TENANT_NAME}/github"
           
           # Create backend.tf for github directory
-          cat > "tenants/${TENANT_NAME}/github/backend.tf" <<GHEOF
+          cat > "tenants/${TENANT_NAME}/github/backend.tf" <<'GHEOF'
 terraform {
   backend "s3" {
     bucket         = "github-tf-state-bucket"
-    key            = "\${TENANT_NAME}/github/terraform.tfstate"
-    region         = "${LOCATION}"
+    key            = "${TENANT_NAME}/github/terraform.tfstate"
+    region         = "{{ inputs.location }}"
     encrypt        = true
     dynamodb_table = "terraform-locks"
   }
 }
 GHEOF
+          # Replace placeholder with actual location
+          sed -i "s/{{ inputs.location }}/${LOCATION}/g" "tenants/${TENANT_NAME}/github/backend.tf"
           echo "Created: tenants/${TENANT_NAME}/github/backend.tf"
           
           # Handle 'all' option or single environment
