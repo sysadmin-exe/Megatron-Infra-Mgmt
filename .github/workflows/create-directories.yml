@@ -104,10 +104,22 @@ jobs:
           echo ""
           echo "Directory tree:"
           if command -v tree &> /dev/null; then
-            tree -a tenants/ shared-services/ 2>/dev/null || true
+            # Build tree command arguments dynamically
+            TREE_ARGS=""
+            if [ -d "tenants" ]; then
+              TREE_ARGS="tenants/"
+            fi
+            if [ -d "shared-services" ]; then
+              TREE_ARGS="$TREE_ARGS shared-services/"
+            fi
+            if [ -n "$TREE_ARGS" ]; then
+              tree -a $TREE_ARGS 2>/dev/null || true
+            fi
           else
-            echo "tenants/"
-            find tenants -type d 2>/dev/null | sort || true
+            if [ -d "tenants" ]; then
+              echo "tenants/"
+              find tenants -type d 2>/dev/null | sort || true
+            fi
             if [ -d "shared-services" ]; then
               echo "shared-services/"
             fi
