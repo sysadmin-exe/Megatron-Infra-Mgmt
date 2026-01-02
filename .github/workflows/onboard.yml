@@ -96,14 +96,14 @@ terraform {
   backend "s3" {
     bucket         = "github-tf-state-bucket"
     key            = "${TENANT_NAME}/github/terraform.tfstate"
-    region         = "{{ inputs.location }}"
+    region         = "LOCATION_PLACEHOLDER"
     encrypt        = true
     dynamodb_table = "terraform-locks"
   }
 }
 GHEOF
           # Replace placeholder with actual location
-          sed -i "s/{{ inputs.location }}/${LOCATION}/g" "tenants/${TENANT_NAME}/github/backend.tf"
+          sed -i "s/LOCATION_PLACEHOLDER/${LOCATION}/g" "tenants/${TENANT_NAME}/github/backend.tf"
           echo "Created: tenants/${TENANT_NAME}/github/backend.tf"
           
           # Handle 'all' option or single environment
