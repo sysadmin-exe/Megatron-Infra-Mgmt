@@ -126,8 +126,8 @@ GHEOF
 terraform {
   backend "s3" {
     bucket         = "${env}-tf-state-bucket"
-    key            = "${TENANT_NAME}/${{ inputs.location }}/${env}/terraform.tfstate"
-    region         = "${{ inputs.location }}"
+    key            = "${TENANT_NAME}/${LOCATION}/${env}/terraform.tfstate"
+    region         = "${LOCATION}"
     encrypt        = true
     dynamodb_table = "terraform-locks"
   }
