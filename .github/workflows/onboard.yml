@@ -91,17 +91,17 @@ jobs:
           echo "Created: tenants/${TENANT_NAME}/github"
           
           # Create backend.tf for github directory
-          cat > "tenants/${TENANT_NAME}/github/backend.tf" <<EOF
+          cat > "tenants/${TENANT_NAME}/github/backend.tf" <<GHEOF
 terraform {
   backend "s3" {
     bucket         = "github-tf-state-bucket"
-    key            = "${TENANT_NAME}/github/terraform.tfstate"
-    region         = "${{ inputs.location }}"
+    key            = "\${TENANT_NAME}/github/terraform.tfstate"
+    region         = "${LOCATION}"
     encrypt        = true
     dynamodb_table = "terraform-locks"
   }
 }
-EOF
+GHEOF
           echo "Created: tenants/${TENANT_NAME}/github/backend.tf"
           
           # Handle 'all' option or single environment
