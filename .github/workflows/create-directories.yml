@@ -1,0 +1,95 @@
+name: Create Directory Structure
+
+on:
+  workflow_dispatch:
+    inputs:
+      tenant_name:
+        description: 'Name of the tenant (e.g., platform-team)'
+        required: true
+        type: string
+        default: 'platform-team'
+      environments:
+        description: 'Comma-separated list of environments (e.g., dev,staging,prod)'
+        required: true
+        type: string
+        default: 'dev,staging,prod'
+      create_shared_services:
+        description: 'Create shared-services directory'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  create-directories:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Create directory structure
+        run: |
+          # Set variables from inputs
+          TENANT_NAME="${{ inputs.tenant_name }}"
+          ENVIRONMENTS="${{ inputs.environments }}"
+          CREATE_SHARED_SERVICES="${{ inputs.create_shared_services }}"
+          
+          echo "Creating directory structure for tenant: $TENANT_NAME"
+          echo "Environments: $ENVIRONMENTS"
+          
+          # Create base tenant directory with github subdirectory
+          mkdir -p "tenants/${TENANT_NAME}/github"
+          echo "Created: tenants/${TENANT_NAME}/github"
+          
+          # Split environments by comma and create structure for each
+          IFS=',' read -ra ENV_ARRAY <<< "$ENVIRONMENTS"
+          for env in "${ENV_ARRAY[@]}"; do
+            # Trim whitespace
+            env=$(echo "$env" | xargs)
+            
+            echo "Creating directories for environment: $env"
+            
+            # Create cluster directories
+            mkdir -p "tenants/${TENANT_NAME}/${env}/cluster/eks"
+            mkdir -p "tenants/${TENANT_NAME}/${env}/cluster/bootstrap"
+            echo "Created: tenants/${TENANT_NAME}/${env}/cluster/eks"
+            echo "Created: tenants/${TENANT_NAME}/${env}/cluster/bootstrap"
+            
+            # Create networking directory
+            mkdir -p "tenants/${TENANT_NAME}/${env}/networking"
+            echo "Created: tenants/${TENANT_NAME}/${env}/networking"
+          done
+          
+          # Create shared-services directory if requested
+          if [ "$CREATE_SHARED_SERVICES" = "true" ]; then
+            mkdir -p "shared-services"
+            echo "Created: shared-services"
+          fi
+          
+          # Create .gitkeep files to ensure directories are tracked by git
+          find tenants -type d -exec touch {}/.gitkeep \;
+          if [ "$CREATE_SHARED_SERVICES" = "true" ]; then
+            touch shared-services/.gitkeep
+          fi
+          
+          echo ""
+          echo "Directory structure created successfully!"
+          echo ""
+          echo "Directory tree:"
+          tree -a || find . -type d -not -path "./.git/*" | sort
+      
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add .
+          
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Create directory structure for tenant: ${{ inputs.tenant_name }}"
+            git push
+            echo "Changes committed and pushed successfully"
+          fi
