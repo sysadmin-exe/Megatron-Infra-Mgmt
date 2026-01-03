@@ -18,7 +18,7 @@ on:
           - prod
         default: 'all'
       location:
-        description: 'Location for the tenant (not used in directory structure)'
+        description: 'Location for the tenant'
         required: false
         type: choice
         options:
